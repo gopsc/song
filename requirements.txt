@@ -1,0 +1,5 @@
+numpy
+sounddevice
+soundfile
+#portaudio19-dev
+#libasound2-dev
