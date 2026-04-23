@@ -445,8 +445,6 @@ class WhiteNoiseBeatGeneratorCLI:
             print(f"解析音调脚本时出错: {str(e)}")
             return [], {}
     
-    
-    
     def generate_audio_with_dynamic_params(self, events, final_params):
         """根据事件序列生成音频，支持所有动态参数变化和精细时值"""
         
@@ -523,16 +521,19 @@ class WhiteNoiseBeatGeneratorCLI:
                 print(f"生成节拍 {beat_index}: BPM={bpm}, 噪音音量={noise_volume}, "
                       f"音符音量={note_volume}, 波形={note_waveform}, 音符时长={note_duration_sec:.3f}秒")
             
-            # 生成白噪音
-            end_sample = min(start_sample + sound_samples, total_samples)
-            if start_sample < total_samples:
-                noise_length = end_sample - start_sample
-                if noise_length > 0:
-                    noise = np.random.uniform(-noise_volume, noise_volume, noise_length)
-                    audio_data[start_sample:end_sample] += noise
-            
-            # 生成音符
+            # ---------------------------------------------------------
+            # 核心修复：只有当音符不是休止符 'R' 时，才发出声音
+            # ---------------------------------------------------------
             if note_name != 'R':
+                # 生成白噪音
+                end_sample = min(start_sample + sound_samples, total_samples)
+                if start_sample < total_samples:
+                    noise_length = end_sample - start_sample
+                    if noise_length > 0:
+                        noise = np.random.uniform(-noise_volume, noise_volume, noise_length)
+                        audio_data[start_sample:end_sample] += noise
+                
+                # 生成音符
                 frequency = self.note_frequencies.get(note_name, 440.0)
                 
                 note_wave = self.generate_note(frequency, note_duration_sec, note_volume, note_waveform)
@@ -558,6 +559,8 @@ class WhiteNoiseBeatGeneratorCLI:
         }
         
         return audio_data, info
+    
+    
 
     def play_audio(self, audio_data, info):
         """播放音频"""
