@@ -11,6 +11,9 @@ class WhiteNoiseBeatGeneratorCLI:
         
         # 音符频率字典 (A4 = 440Hz)
         self.note_frequencies = self.create_note_frequencies()
+        
+        # 当前默认波形（初始为正弦波）
+        self.current_waveform = "sine"
     
     def create_note_frequencies(self):
         """创建完整的音符频率表"""
@@ -77,7 +80,7 @@ class WhiteNoiseBeatGeneratorCLI:
         """根据波形类型生成音符"""
         if frequency == 0:  # 休止符
             return np.zeros(int(self.sample_rate * duration))
-            
+        
         if waveform == "sine":
             return self.generate_sine_wave(frequency, duration, volume)
         elif waveform == "square":
@@ -87,10 +90,11 @@ class WhiteNoiseBeatGeneratorCLI:
         elif waveform == "triangle":
             return self.generate_triangle_wave(frequency, duration, volume)
         else:
+            print(f"警告: 未知波形类型 '{waveform}'，使用正弦波")
             return self.generate_sine_wave(frequency, duration, volume)
     
     def parse_note_sequence(self, sequence_str):
-        """解析音符序列"""
+        """解析音符序列（用于命令行参数）"""
         if not sequence_str:
             return []
         
@@ -98,24 +102,47 @@ class WhiteNoiseBeatGeneratorCLI:
         
         # 验证音符
         valid_notes = []
+        current_waveform = "sine"  # 命令行默认使用正弦波
+        valid_waveforms = ["sine", "square", "sawtooth", "triangle"]
+        
         for note in notes:
-            # 解析带有时值的音符，例如 C4-4, R-8
+            # 检查是否是波形切换命令
+            if note.startswith('@'):
+                waveform_cmd = note[1:].lower()
+                if waveform_cmd in valid_waveforms:
+                    current_waveform = waveform_cmd
+                    print(f"切换到波形: {current_waveform}")
+                else:
+                    print(f"警告: 无效波形类型 '{waveform_cmd}'，忽略切换命令")
+                continue
+            
+            # 解析音符格式：音符-时值-波形 或 音符-时值 或 音符
             if '-' in note:
                 parts = note.split('-')
-                if len(parts) == 2:
+                if len(parts) >= 2:
                     note_name = parts[0]
                     try:
                         duration = int(parts[1])
+                        # 如果有第三个部分，使用指定的波形；否则使用当前波形
+                        waveform = parts[2].lower() if len(parts) > 2 else current_waveform
+                        
+                        # 验证波形类型
+                        if waveform not in valid_waveforms:
+                            print(f"警告: 无效波形类型 '{waveform}'，使用当前波形 '{current_waveform}'")
+                            waveform = current_waveform
+                        
                         if note_name == 'R' or note_name in self.note_frequencies:
-                            valid_notes.append((note_name, duration))
+                            valid_notes.append((note_name, duration, waveform))
+                            print(f"解析音符: {note_name}, 时值: {duration}, 波形: {waveform}")
                         else:
                             print(f"警告: 忽略无效音符 '{note_name}'")
                     except ValueError:
                         print(f"警告: 忽略无效时值 '{parts[1]}'")
             else:
-                # 没有指定时值，默认为四分音符
+                # 没有指定时值和波形，默认为四分音符和当前波形
                 if note == 'R' or note in self.note_frequencies:
-                    valid_notes.append((note, 4))
+                    valid_notes.append((note, 4, current_waveform))
+                    print(f"解析音符: {note}, 时值: 4, 波形: {current_waveform}")
                 else:
                     print(f"警告: 忽略无效音符 '{note}'")
         
@@ -128,34 +155,96 @@ class WhiteNoiseBeatGeneratorCLI:
                 lines = f.readlines()
             
             note_sequence = []
+            current_waveform = "sine"  # 默认波形为正弦波
+            valid_waveforms = ["sine", "square", "sawtooth", "triangle"]
+            
             for line_num, line in enumerate(lines, 1):
-                # 忽略空行和注释
-                line = line.strip()
-                if not line or line.startswith('#'):
+                # 保留原始行用于调试
+                original_line = line.strip()
+                
+                # 忽略空行
+                line = original_line
+                if not line:
                     continue
                 
-                # 解析每行的音符
-                notes = [note.strip().upper() for note in line.split() if note.strip()]
-                for note in notes:
-                    # 解析带有时值的音符，例如 C4-4, R-8
-                    if '-' in note:
-                        parts = note.split('-')
-                        if len(parts) == 2:
+                # 处理注释（#后的内容为注释）
+                if '#' in line:
+                    line = line.split('#')[0].strip()
+                    if not line:
+                        continue
+                
+                # 检查是否是波形设置命令
+                if line.startswith('@WAVEFORM') or line.startswith('@waveform'):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        waveform_cmd = parts[1].lower()
+                        if waveform_cmd in valid_waveforms:
+                            current_waveform = waveform_cmd
+                            print(f"第{line_num}行: 切换到波形 '{current_waveform}'")
+                        else:
+                            print(f"警告: 第{line_num}行，无效波形类型 '{waveform_cmd}'，忽略设置")
+                    continue
+                
+                # 检查是否是简写波形切换命令
+                if line.startswith('@'):
+                    waveform_cmd = line[1:].strip().lower()
+                    if waveform_cmd in valid_waveforms:
+                        current_waveform = waveform_cmd
+                        print(f"第{line_num}行: 切换到波形 '{current_waveform}'")
+                    else:
+                        print(f"警告: 第{line_num}行，无效波形类型 '{waveform_cmd}'，忽略设置")
+                    continue
+                
+                # 解析每行的音符（支持空格或逗号分隔）
+                # 先按逗号分割，如果没有逗号则按空格分割
+                if ',' in line:
+                    tokens = [token.strip().upper() for token in line.split(',') if token.strip()]
+                else:
+                    tokens = [token.strip().upper() for token in line.split() if token.strip()]
+                
+                # 处理每个token（可能是音符或波形切换命令）
+                for token in tokens:
+                    # 检查是否是行内波形切换命令
+                    if token.startswith('@'):
+                        waveform_cmd = token[1:].lower()
+                        if waveform_cmd in valid_waveforms:
+                            current_waveform = waveform_cmd
+                            print(f"第{line_num}行: 切换到波形 '{current_waveform}'")
+                        else:
+                            print(f"警告: 第{line_num}行，无效波形类型 '{waveform_cmd}'，忽略切换命令")
+                        continue
+                    
+                    # 解析音符格式：音符-时值-波形 或 音符-时值 或 音符
+                    if '-' in token:
+                        parts = token.split('-')
+                        if len(parts) >= 2:
                             note_name = parts[0]
                             try:
                                 duration = int(parts[1])
+                                # 如果有第三个部分，使用指定的波形；否则使用当前波形
+                                waveform = parts[2].lower() if len(parts) > 2 else current_waveform
+                                
+                                # 验证波形类型
+                                if waveform not in valid_waveforms:
+                                    print(f"警告: 第{line_num}行，无效波形类型 '{waveform}'，使用当前波形 '{current_waveform}'")
+                                    waveform = current_waveform
+                                
                                 if note_name == 'R' or note_name in self.note_frequencies:
-                                    note_sequence.append((note_name, duration))
+                                    note_sequence.append((note_name, duration, waveform))
+                                    if len(note_sequence) <= 20:  # 只显示前20个
+                                        print(f"解析音符[{len(note_sequence)}]: {note_name}, 时值: {duration}, 波形: {waveform}")
                                 else:
-                                    print(f"警告: 脚本文件第{line_num}行，忽略无效音符 '{note_name}'")
+                                    print(f"警告: 第{line_num}行，忽略无效音符 '{note_name}'")
                             except ValueError:
-                                print(f"警告: 脚本文件第{line_num}行，忽略无效时值 '{parts[1]}'")
+                                print(f"警告: 第{line_num}行，忽略无效时值 '{parts[1]}'")
                     else:
-                        # 没有指定时值，默认为四分音符
-                        if note == 'R' or note in self.note_frequencies:
-                            note_sequence.append((note, 4))
+                        # 没有指定时值和波形，默认为四分音符和当前波形
+                        if token == 'R' or token in self.note_frequencies:
+                            note_sequence.append((token, 4, current_waveform))
+                            if len(note_sequence) <= 20:  # 只显示前20个
+                                print(f"解析音符[{len(note_sequence)}]: {token}, 时值: 4, 波形: {current_waveform}")
                         else:
-                            print(f"警告: 脚本文件第{line_num}行，忽略无效音符 '{note}'")
+                            print(f"警告: 第{line_num}行，忽略无效音符 '{token}'")
             
             return note_sequence
         except Exception as e:
@@ -189,7 +278,7 @@ class WhiteNoiseBeatGeneratorCLI:
             'sequence_length': len(note_sequence)
         }
     
-    def generate_white_noise_beat(self, time_signature, bars, bpm, duration_ms, noise_volume, note_volume, waveform, note_sequence):
+    def generate_white_noise_beat(self, time_signature, bars, bpm, duration_ms, noise_volume, note_volume, note_sequence):
         """生成带多音符旋律的白噪音节拍音频数据"""
         info = self.calculate_beat_info(time_signature, bars, bpm, duration_ms, note_sequence)
         
@@ -201,7 +290,7 @@ class WhiteNoiseBeatGeneratorCLI:
         note_sequence = info['note_sequence']
         
         if not note_sequence:
-            note_sequence = [("C4", 4)]  # 默认音符
+            note_sequence = [("C4", 4, "sine")]
         
         # 计算总样本数
         total_samples = int(total_duration * self.sample_rate)
@@ -215,6 +304,9 @@ class WhiteNoiseBeatGeneratorCLI:
         current_sample = 0
         note_index = 0
         
+        print(f"\n开始生成音频，总节拍数: {total_beats}, 音符序列长度: {len(note_sequence)}")
+        print("前10个音符的详细信息:")
+        
         while current_sample < total_samples:
             # 生成白噪音（每拍都有）
             end_sample = min(current_sample + beat_sound_samples, total_samples)
@@ -224,18 +316,36 @@ class WhiteNoiseBeatGeneratorCLI:
                     noise = np.random.uniform(-noise_volume, noise_volume, noise_length)
                     audio_data[current_sample:end_sample] += noise
             
-            # 生成音符（根据序列循环）
+            # 获取当前音符信息
             current_note_info = note_sequence[note_index % len(note_sequence)]
+            
+            # 解析音符信息
             if isinstance(current_note_info, tuple):
-                current_note, note_duration = current_note_info
+                if len(current_note_info) == 3:
+                    current_note, note_duration, note_waveform = current_note_info
+                elif len(current_note_info) == 2:
+                    current_note, note_duration = current_note_info
+                    note_waveform = "sine"
+                else:
+                    current_note = current_note_info[0]
+                    note_duration = 4
+                    note_waveform = "sine"
             else:
-                current_note, note_duration = current_note_info, 4  # 兼容旧格式
+                current_note = current_note_info
+                note_duration = 4
+                note_waveform = "sine"
+            
+            # 调试输出前10个音符
+            if note_index < 10:
+                print(f"节拍 {note_index}: 音符={current_note}, 时值=1/{note_duration}, 波形={note_waveform}")
             
             if current_note != 'R':  # 不是休止符
                 # 计算音符持续时间（以四分音符为基准）
-                note_duration_sec = beat_duration * (4 / note_duration)
+                note_duration_sec = beat_duration * (4.0 / note_duration)
                 frequency = self.note_frequencies.get(current_note, 440.0)
-                note_wave = self.generate_note(frequency, note_duration_sec, note_volume, waveform)
+                
+                # 使用音符自己的波形类型
+                note_wave = self.generate_note(frequency, note_duration_sec, note_volume, note_waveform)
                 note_samples = len(note_wave)
                 end_note_sample = min(current_sample + note_samples, total_samples)
                 if current_sample < total_samples:
@@ -253,7 +363,7 @@ class WhiteNoiseBeatGeneratorCLI:
             audio_data = audio_data / max_amplitude * 0.9
         
         return audio_data, info
-    
+
     def play_audio(self, audio_data, info):
         """播放音频"""
         try:
@@ -278,12 +388,18 @@ class WhiteNoiseBeatGeneratorCLI:
                 beat_in_bar = current_beat % beats_per_bar + 1
                 
                 # 获取当前音符
-                if note_sequence:
-                    current_note_index = current_beat % len(note_sequence)
-                    current_note_info = note_sequence[current_note_index]
+                if note_sequence and current_beat < len(note_sequence):
+                    current_note_info = note_sequence[current_beat]
                     if isinstance(current_note_info, tuple):
-                        current_note, note_duration = current_note_info
-                        note_display = f" - 音符: {current_note} ({'1/'+str(note_duration) if note_duration else ''})"
+                        if len(current_note_info) == 3:
+                            current_note, note_duration, note_waveform = current_note_info
+                            note_display = f" - 音符: {current_note} (1/{note_duration}) - 波形: {note_waveform}"
+                        elif len(current_note_info) == 2:
+                            current_note, note_duration = current_note_info
+                            note_display = f" - 音符: {current_note} (1/{note_duration})"
+                        else:
+                            current_note = current_note_info[0]
+                            note_display = f" - 音符: {current_note}"
                     else:
                         current_note = current_note_info
                         note_display = f" - 音符: {current_note}"
@@ -295,34 +411,38 @@ class WhiteNoiseBeatGeneratorCLI:
             
             # 等待播放完成
             sd.wait()
-            print("播放完成!                                                ")
+            print("\n播放完成!                                                ")
         except Exception as e:
             print(f"播放音频时出错: {str(e)}")
             sd.stop()
     
-    def save_audio(self, audio_data, info, output_file):
+    def save_audio(self, audio_data, info, output_file, time_signature="4/4", bpm=120):
         """保存音频为文件"""
         try:
             # 保存为音频文件
             sf.write(output_file, audio_data, self.sample_rate)
             
             # 显示保存信息
-            # 处理带有时值的音符序列
             sequence_preview_parts = []
             for note_info in info['note_sequence'][:8]:
                 if isinstance(note_info, tuple):
-                    note, duration = note_info
-                    sequence_preview_parts.append(f"{note}-{duration}")
+                    if len(note_info) == 3:
+                        note, duration, waveform_note = note_info
+                        sequence_preview_parts.append(f"{note}-{duration}-{waveform_note}")
+                    elif len(note_info) == 2:
+                        note, duration = note_info
+                        sequence_preview_parts.append(f"{note}-{duration}")
+                    else:
+                        sequence_preview_parts.append(note_info[0])
                 else:
                     sequence_preview_parts.append(note_info)
             sequence_preview = " | ".join(sequence_preview_parts)
             if len(info['note_sequence']) > 8:
                 sequence_preview += " ..."
             
-            print(f"音频已保存: {output_file}")
-            print(f"节拍: {args.time_signature}")
-            print(f"速度: {args.bpm} BPM")
-            print(f"波形: {args.waveform}")
+            print(f"\n音频已保存: {output_file}")
+            print(f"节拍: {time_signature}")
+            print(f"速度: {bpm} BPM")
             print(f"音符序列: {sequence_preview}")
             print(f"时长: {info['total_duration']:.2f} 秒")
             print(f"总拍数: {info['total_beats']}")
@@ -344,17 +464,26 @@ class WhiteNoiseBeatGeneratorCLI:
             print(f"正在读取音调脚本文件: {args.script}")
             note_sequence = self.parse_tone_script(args.script)
             if note_sequence:
-                print(f"从脚本文件中读取到 {len(note_sequence)} 个音符")
-        
-        # 如果脚本文件没有提供音符序列，使用命令行参数
-        if not note_sequence:
+                print(f"\n从脚本文件中读取到 {len(note_sequence)} 个音符")
+        elif args.notes:
+            # 使用命令行参数
             note_sequence = self.parse_note_sequence(args.notes)
-            if not note_sequence:
-                note_sequence = [("C4", 4), ("R", 4), ("E4", 4), ("R", 4), ("G4", 4), ("R", 4), ("C5", 4), ("R", 4)]
-                print("使用默认音符序列: C4, R, E4, R, G4, R, C5, R")
+            if note_sequence:
+                print(f"\n从命令行参数读取到 {len(note_sequence)} 个音符")
+        
+        # 如果没有提供任何音符，使用默认序列
+        if not note_sequence:
+            default_notes = [
+                ("C4", 4, "sine"), ("R", 4, "sine"), 
+                ("E4", 4, "square"), ("R", 4, "square"),
+                ("G4", 4, "sawtooth"), ("R", 4, "sawtooth"), 
+                ("C5", 4, "triangle"), ("R", 4, "triangle")
+            ]
+            note_sequence = default_notes
+            print(f"\n使用默认音符序列（包含不同波形示例）")
         
         # 生成音频
-        print("正在生成音频...")
+        print("\n正在生成音频...")
         audio_data, info = self.generate_white_noise_beat(
             args.time_signature,
             args.bars,
@@ -362,7 +491,6 @@ class WhiteNoiseBeatGeneratorCLI:
             args.duration,
             args.noise_volume,
             args.note_volume,
-            args.waveform,
             note_sequence
         )
         
@@ -374,23 +502,30 @@ class WhiteNoiseBeatGeneratorCLI:
         print(f"总拍数: {info['total_beats']}")
         print(f"每拍时长: {info['beat_duration']:.3f}秒")
         print(f"总时长: {info['total_duration']:.2f}秒")
-        print(f"波形: {args.waveform}")
         print(f"白噪音音量: {args.noise_volume:.2f}")
         print(f"音符音量: {args.note_volume:.2f}")
         print(f"音长: {info['beat_sound_duration']:.3f}秒")
-        # 处理带有时值的音符序列
-        sequence_display_parts = []
-        for note_info in note_sequence[:12]:
-            if isinstance(note_info, tuple):
-                note, duration = note_info
-                sequence_display_parts.append(f"{note}-{duration}")
-            else:
-                sequence_display_parts.append(note_info)
-        print(f"音符序列: {' | '.join(sequence_display_parts)}{' ...' if len(note_sequence) > 12 else ''}")
+        
+        # 显示音符序列摘要
+        print(f"\n音符序列共 {len(note_sequence)} 个音符")
+        
+        # 统计使用的波形类型
+        waveform_stats = {}
+        for note_info in note_sequence:
+            if isinstance(note_info, tuple) and len(note_info) == 3:
+                waveform = note_info[2]
+                waveform_stats[waveform] = waveform_stats.get(waveform, 0) + 1
+            elif isinstance(note_info, tuple) and len(note_info) == 2:
+                waveform_stats["sine"] = waveform_stats.get("sine", 0) + 1
+        
+        if waveform_stats:
+            print("波形使用统计:")
+            for waveform, count in waveform_stats.items():
+                print(f"  {waveform}: {count} 个音符")
         
         # 播放或保存
         if args.output:
-            self.save_audio(audio_data, info, args.output)
+            self.save_audio(audio_data, info, args.output, args.time_signature, args.bpm)
         else:
             self.play_audio(audio_data, info)
 
@@ -418,10 +553,9 @@ if __name__ == "__main__":
     # 声音参数
     parser.add_argument("--noise-volume", type=float, default=0.3, help="白噪音音量(0-1)，默认: 0.3")
     parser.add_argument("--note-volume", type=float, default=0.5, help="音符音量(0-1)，默认: 0.5")
-    parser.add_argument("--waveform", "-w", default="sine", choices=["sine", "square", "sawtooth", "triangle"], help="波形类型，默认: sine")
     
-    # 音符序列
-    parser.add_argument("--notes", "-n", default="", help="音符序列，用逗号分隔，R表示休止符，例如: C4,R,E4,R,G4,R,C5,R")
+    # 音符序列（二选一）
+    parser.add_argument("--notes", "-n", default="", help="音符序列，用逗号分隔，R表示休止符，支持@波形切换和音符-时值-波形格式")
     parser.add_argument("--script", "-s", help="音调脚本文件路径，例如: script.txt")
     
     # 输出选项
