@@ -3,6 +3,7 @@ import sounddevice as sd
 import soundfile as sf
 import time
 import argparse
+import re
 
 class WhiteNoiseBeatGeneratorCLI:
     def __init__(self):
@@ -131,12 +132,13 @@ class WhiteNoiseBeatGeneratorCLI:
                 if not original_line:
                     continue
                 
-                if '#' in original_line:
-                    line_content = original_line.split('#')[0].strip()
-                    if not line_content:
-                        continue
-                else:
-                    line_content = original_line
+                # ========== 核心修复：注释处理逻辑 ==========
+                # 仅匹配「行首/空白字符后的#」为注释，保留音符里的升号#（如C#4、D#4）
+                # 正则说明：(?<!\S) 表示#前面只能是空白/行开头，才会被识别为注释
+                line_content = re.sub(r'(?<!\S)#.*', '', original_line).strip()
+                if not line_content:
+                    continue
+                # ========== 修复结束 ==========
                 
                 # 检查是否是参数设置命令
                 if line_content.startswith('@'):
@@ -283,6 +285,8 @@ class WhiteNoiseBeatGeneratorCLI:
         except Exception as e:
             print(f"解析音调脚本时出错: {str(e)}")
             return [], {}
+    
+    
     
     def generate_audio_with_dynamic_params(self, events, final_params):
         """根据事件序列生成音频，支持所有动态参数变化"""
