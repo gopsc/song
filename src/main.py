@@ -3,7 +3,6 @@ import sounddevice as sd
 import soundfile as sf
 import time
 import argparse
-import json
 
 class WhiteNoiseBeatGeneratorCLI:
     def __init__(self):
@@ -12,17 +11,6 @@ class WhiteNoiseBeatGeneratorCLI:
         
         # 音符频率字典 (A4 = 440Hz)
         self.note_frequencies = self.create_note_frequencies()
-        
-        # 预设旋律模式
-        self.melody_presets = {
-            "简单上行": ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"],
-            "简单下行": ["C5", "B4", "A4", "G4", "F4", "E4", "D4", "C4"],
-            "C大调音阶": ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"],
-            "和弦进行": ["C4", "E4", "G4", "C4", "F4", "A4", "C5", "G4"],
-            "琶音模式": ["C4", "E4", "G4", "C5", "G4", "E4", "C4", "R"],
-            "节奏模式1": ["C4", "R", "E4", "R", "G4", "R", "C5", "R"],
-            "节奏模式2": ["C4", "C4", "E4", "E4", "G4", "G4", "C5", "C5"],
-        }
     
     def create_note_frequencies(self):
         """创建完整的音符频率表"""
@@ -41,6 +29,25 @@ class WhiteNoiseBeatGeneratorCLI:
         # 添加休止符
         frequencies['R'] = 0.0
         return frequencies
+    
+    def print_note_table(self):
+        """输出音符表"""
+        print("\n=== 音符频率表 ===")
+        print("格式: 音符名称 (频率 Hz)")
+        print("-" * 40)
+        
+        # 按八度分组显示
+        for octave in range(1, 8):
+            print(f"\n八度 {octave}:")
+            for note in ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']:
+                note_name = f"{note}{octave}"
+                if note_name in self.note_frequencies:
+                    freq = self.note_frequencies[note_name]
+                    print(f"{note_name:4} : {freq:6.2f} Hz")
+        
+        print("\n特殊符号:")
+        print("R : 休止符 (0 Hz)")
+        print("-" * 40)
     
     def generate_sine_wave(self, frequency, duration, volume=0.5):
         """生成正弦波"""
@@ -92,12 +99,68 @@ class WhiteNoiseBeatGeneratorCLI:
         # 验证音符
         valid_notes = []
         for note in notes:
-            if note == 'R' or note in self.note_frequencies:
-                valid_notes.append(note)
+            # 解析带有时值的音符，例如 C4-4, R-8
+            if '-' in note:
+                parts = note.split('-')
+                if len(parts) == 2:
+                    note_name = parts[0]
+                    try:
+                        duration = int(parts[1])
+                        if note_name == 'R' or note_name in self.note_frequencies:
+                            valid_notes.append((note_name, duration))
+                        else:
+                            print(f"警告: 忽略无效音符 '{note_name}'")
+                    except ValueError:
+                        print(f"警告: 忽略无效时值 '{parts[1]}'")
             else:
-                print(f"警告: 忽略无效音符 '{note}'")
+                # 没有指定时值，默认为四分音符
+                if note == 'R' or note in self.note_frequencies:
+                    valid_notes.append((note, 4))
+                else:
+                    print(f"警告: 忽略无效音符 '{note}'")
         
         return valid_notes
+    
+    def parse_tone_script(self, script_path):
+        """解析音调脚本文件"""
+        try:
+            with open(script_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            note_sequence = []
+            for line_num, line in enumerate(lines, 1):
+                # 忽略空行和注释
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                # 解析每行的音符
+                notes = [note.strip().upper() for note in line.split() if note.strip()]
+                for note in notes:
+                    # 解析带有时值的音符，例如 C4-4, R-8
+                    if '-' in note:
+                        parts = note.split('-')
+                        if len(parts) == 2:
+                            note_name = parts[0]
+                            try:
+                                duration = int(parts[1])
+                                if note_name == 'R' or note_name in self.note_frequencies:
+                                    note_sequence.append((note_name, duration))
+                                else:
+                                    print(f"警告: 脚本文件第{line_num}行，忽略无效音符 '{note_name}'")
+                            except ValueError:
+                                print(f"警告: 脚本文件第{line_num}行，忽略无效时值 '{parts[1]}'")
+                    else:
+                        # 没有指定时值，默认为四分音符
+                        if note == 'R' or note in self.note_frequencies:
+                            note_sequence.append((note, 4))
+                        else:
+                            print(f"警告: 脚本文件第{line_num}行，忽略无效音符 '{note}'")
+            
+            return note_sequence
+        except Exception as e:
+            print(f"解析音调脚本时出错: {str(e)}")
+            return []
     
     def calculate_beat_info(self, time_signature, bars, bpm, duration_ms, note_sequence):
         """计算节拍相关信息"""
@@ -138,7 +201,7 @@ class WhiteNoiseBeatGeneratorCLI:
         note_sequence = info['note_sequence']
         
         if not note_sequence:
-            note_sequence = ["C4"]  # 默认音符
+            note_sequence = [("C4", 4)]  # 默认音符
         
         # 计算总样本数
         total_samples = int(total_duration * self.sample_rate)
@@ -148,32 +211,41 @@ class WhiteNoiseBeatGeneratorCLI:
         beat_samples = int(beat_duration * self.sample_rate)
         beat_sound_samples = int(beat_sound_duration * self.sample_rate)
         
-        # 生成节拍
-        for beat in range(total_beats):
-            # 计算节拍开始位置
-            start_sample = beat * beat_samples
-            
+        # 生成节拍和音符
+        current_sample = 0
+        note_index = 0
+        
+        while current_sample < total_samples:
             # 生成白噪音（每拍都有）
-            end_sample = min(start_sample + beat_sound_samples, total_samples)
-            if start_sample < total_samples:
-                noise_length = end_sample - start_sample
+            end_sample = min(current_sample + beat_sound_samples, total_samples)
+            if current_sample < total_samples:
+                noise_length = end_sample - current_sample
                 if noise_length > 0:
                     noise = np.random.uniform(-noise_volume, noise_volume, noise_length)
-                    audio_data[start_sample:end_sample] += noise
+                    audio_data[current_sample:end_sample] += noise
             
             # 生成音符（根据序列循环）
-            note_index = beat % len(note_sequence)
-            current_note = note_sequence[note_index]
+            current_note_info = note_sequence[note_index % len(note_sequence)]
+            if isinstance(current_note_info, tuple):
+                current_note, note_duration = current_note_info
+            else:
+                current_note, note_duration = current_note_info, 4  # 兼容旧格式
             
             if current_note != 'R':  # 不是休止符
+                # 计算音符持续时间（以四分音符为基准）
+                note_duration_sec = beat_duration * (4 / note_duration)
                 frequency = self.note_frequencies.get(current_note, 440.0)
-                note_wave = self.generate_note(frequency, beat_sound_duration, note_volume, waveform)
+                note_wave = self.generate_note(frequency, note_duration_sec, note_volume, waveform)
                 note_samples = len(note_wave)
-                end_note_sample = min(start_sample + note_samples, total_samples)
-                if start_sample < total_samples:
-                    note_length = end_note_sample - start_sample
+                end_note_sample = min(current_sample + note_samples, total_samples)
+                if current_sample < total_samples:
+                    note_length = end_note_sample - current_sample
                     if note_length > 0:
-                        audio_data[start_sample:end_note_sample] += note_wave[:note_length]
+                        audio_data[current_sample:end_note_sample] += note_wave[:note_length]
+            
+            # 移动到下一个节拍
+            current_sample += beat_samples
+            note_index += 1
         
         # 归一化音频数据，避免削波
         max_amplitude = np.max(np.abs(audio_data))
@@ -208,8 +280,13 @@ class WhiteNoiseBeatGeneratorCLI:
                 # 获取当前音符
                 if note_sequence:
                     current_note_index = current_beat % len(note_sequence)
-                    current_note = note_sequence[current_note_index]
-                    note_display = f" - 音符: {current_note}"
+                    current_note_info = note_sequence[current_note_index]
+                    if isinstance(current_note_info, tuple):
+                        current_note, note_duration = current_note_info
+                        note_display = f" - 音符: {current_note} ({'1/'+str(note_duration) if note_duration else ''})"
+                    else:
+                        current_note = current_note_info
+                        note_display = f" - 音符: {current_note}"
                 else:
                     note_display = ""
                 
@@ -230,7 +307,15 @@ class WhiteNoiseBeatGeneratorCLI:
             sf.write(output_file, audio_data, self.sample_rate)
             
             # 显示保存信息
-            sequence_preview = " | ".join(info['note_sequence'][:8])
+            # 处理带有时值的音符序列
+            sequence_preview_parts = []
+            for note_info in info['note_sequence'][:8]:
+                if isinstance(note_info, tuple):
+                    note, duration = note_info
+                    sequence_preview_parts.append(f"{note}-{duration}")
+                else:
+                    sequence_preview_parts.append(note_info)
+            sequence_preview = " | ".join(sequence_preview_parts)
             if len(info['note_sequence']) > 8:
                 sequence_preview += " ..."
             
@@ -246,19 +331,27 @@ class WhiteNoiseBeatGeneratorCLI:
     
     def run(self, args):
         """运行命令行版本"""
+        # 输出音符表
+        if args.note_table:
+            self.print_note_table()
+            return
+        
         # 处理音符序列
-        if args.preset:
-            if args.preset in self.melody_presets:
-                note_sequence = self.melody_presets[args.preset]
-                print(f"使用预设旋律: {args.preset}")
-            else:
-                print(f"警告: 预设 '{args.preset}' 不存在，使用默认序列")
-                note_sequence = ["C4", "R", "E4", "R", "G4", "R", "C5", "R"]
-        else:
+        note_sequence = []
+        
+        # 优先使用音调脚本文件
+        if args.script:
+            print(f"正在读取音调脚本文件: {args.script}")
+            note_sequence = self.parse_tone_script(args.script)
+            if note_sequence:
+                print(f"从脚本文件中读取到 {len(note_sequence)} 个音符")
+        
+        # 如果脚本文件没有提供音符序列，使用命令行参数
+        if not note_sequence:
             note_sequence = self.parse_note_sequence(args.notes)
             if not note_sequence:
-                note_sequence = ["C4", "R", "E4", "R", "G4", "R", "C5", "R"]
-                print("使用默认音符序列")
+                note_sequence = [("C4", 4), ("R", 4), ("E4", 4), ("R", 4), ("G4", 4), ("R", 4), ("C5", 4), ("R", 4)]
+                print("使用默认音符序列: C4, R, E4, R, G4, R, C5, R")
         
         # 生成音频
         print("正在生成音频...")
@@ -285,7 +378,15 @@ class WhiteNoiseBeatGeneratorCLI:
         print(f"白噪音音量: {args.noise_volume:.2f}")
         print(f"音符音量: {args.note_volume:.2f}")
         print(f"音长: {info['beat_sound_duration']:.3f}秒")
-        print(f"音符序列: {' | '.join(note_sequence[:12])}{' ...' if len(note_sequence) > 12 else ''}")
+        # 处理带有时值的音符序列
+        sequence_display_parts = []
+        for note_info in note_sequence[:12]:
+            if isinstance(note_info, tuple):
+                note, duration = note_info
+                sequence_display_parts.append(f"{note}-{duration}")
+            else:
+                sequence_display_parts.append(note_info)
+        print(f"音符序列: {' | '.join(sequence_display_parts)}{' ...' if len(note_sequence) > 12 else ''}")
         
         # 播放或保存
         if args.output:
@@ -321,10 +422,11 @@ if __name__ == "__main__":
     
     # 音符序列
     parser.add_argument("--notes", "-n", default="", help="音符序列，用逗号分隔，R表示休止符，例如: C4,R,E4,R,G4,R,C5,R")
-    parser.add_argument("--preset", "-p", help="预设旋律模式，例如: 节奏模式1")
+    parser.add_argument("--script", "-s", help="音调脚本文件路径，例如: script.txt")
     
     # 输出选项
     parser.add_argument("--output", "-o", help="输出音频文件路径，例如: output.wav")
+    parser.add_argument("--note-table", action="store_true", help="输出音符频率表")
     
     args = parser.parse_args()
     
