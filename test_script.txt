@@ -1,9 +1,165 @@
-# 测试脚本文件 - 包含不同波形类型的音符
-C4-4-sine
-E4-4-square
-G4-4-sawtooth
-C5-4-triangle
-R-4-sine
-C4-4-sine
-E4-4-square
-G4-4-sawtooth
+# ============================================
+# 史诗级电子音乐作品
+# 风格：渐进式电子音乐，包含多个乐章
+# ============================================
+
+# ---------- 全局设置 ----------
+@time_signature 4/4
+@bars 48                    # 48小节，约2分钟
+@bpm 128                    
+@duration 100               
+@noise_volume 0.3           
+@note_volume 0.55           
+
+# ========== 第一乐章：苏醒 (第1-12小节) ==========
+# 使用正弦波和三角波，营造空灵感
+
+@waveform sine
+
+# 引子 - 低音铺垫
+C3-4 R-4 C3-8 R-4 C3-4
+G2-4 R-4 G2-8 R-4 G2-4
+F2-4 R-4 F2-8 R-4 F2-4
+C3-4 R-4 C3-8 R-4 C3-4
+
+# 主题引入 - 加入三角波
+@triangle
+C4-8 E4-8 G4-8 C5-8
+C5-8 G4-8 E4-8 C4-8
+@sine
+F4-8 A4-8 C5-8 F5-8
+F5-8 C5-8 A4-8 F4-8
+
+# 主题发展 - 混合波形
+C4-8-triangle E4-8-sine G4-8-triangle C5-8-sine
+C5-8-square B4-8-triangle A4-8-sine G4-8-square
+@waveform sawtooth
+F4-8 A4-8 C5-8 F5-8
+@sine
+E5-8 D5-8 C5-8 G4-8
+
+# 过渡段
+C4-4 R-2 G4-8 R-4 C5-4
+R-2 E5-8 R-4 G5-4
+R-2 C6-8 R-4 R-4
+R-2 R-2 R-2 R-2
+
+# ========== 第二乐章：脉动 (第13-24小节) ==========
+# 切换到方波和锯齿波，增加能量
+
+@waveform square
+@bpm 132                   # 稍微加速
+@noise_volume 0.4          # 增加噪音量
+
+# 节奏建立
+C4-16 C4-16 R-8 C4-16 C4-16 R-8
+G4-16 G4-16 R-8 G4-16 G4-16 R-8
+F4-16 F4-16 R-8 F4-16 F4-16 R-8
+C5-16 C5-16 R-8 C5-16 C5-16 R-8
+
+# 主旋律 - 快速音符
+@sawtooth
+C5-8 C5-8 B4-8 B4-8 A4-8 A4-8 G4-8 G4-8
+F4-8 F4-8 E4-8 E4-8 D4-8 D4-8 C4-8 C4-8
+@square
+E5-8 E5-8 D5-8 D5-8 C5-8 C5-8 B4-8 B4-8
+A4-8 A4-8 G4-8 G4-8 F4-8 F4-8 E4-8 E4-8
+
+# 和声层叠
+@triangle
+C4-8 E4-8 G4-8 C5-8
+@sawtooth  
+E4-8 G4-8 C5-8 E5-8
+@square
+G4-8 C5-8 E5-8 G5-8
+@sine
+C5-16 R-8 C5-16 R-8
+
+# 过渡 - 渐强
+@waveform sawtooth
+C4-8 C4-4 C4-8 C4-4
+C4-4 C4-4 C4-4 C4-4
+@square
+C5-8 C5-4 C5-8 C5-4
+C5-4 C5-2 R-2
+
+# ========== 第三乐章：风暴 (第25-36小节) ==========
+# 全波形混合，最高能量
+
+@bpm 136                   # 进一步加速
+@noise_volume 0.45         
+@note_volume 0.65          
+
+# 开场 - 强力节奏
+@square
+C4-8-square C4-8-sawtooth C4-8-triangle C4-8-sine
+G4-8-square G4-8-sawtooth G4-8-triangle G4-8-sine
+@sawtooth
+F4-4-square F4-4-sawtooth F4-4-triangle F4-4-sine
+C5-8-square C5-4-sawtooth C5-4-triangle
+
+# 复杂节奏模式
+@sine C5-16 @square B4-8 @sawtooth A4-8 @triangle G4-16
+@sine G4-16 @square F4-8 @sawtooth E4-8 @triangle D4-16
+@square C5-8 @sawtooth B4-8 @triangle A4-8 @sine G4-8
+@square F4-8 @sawtooth E4-8 @triangle D4-8 @sine C4-8
+
+# 高潮 - 全音符进行
+C4-4 D4-4 E4-4 F4-4
+G4-4 A4-4 B4-4 C5-4
+@square
+C5-4 D5-4 E5-4 F5-4
+G5-4 A5-4 B5-4 C6-4
+
+# 持续高潮
+@sawtooth
+C6-8 C6-8 B5-8 B5-8 A5-8 A5-8 G5-8 G5-8
+F5-8 F5-8 E5-8 E5-8 D5-8 D5-8 C5-8 C5-8
+@triangle
+C6-8 C6-8 B5-8 B5-8 A5-8 A5-8 G5-8 G5-8
+@square
+F5-4 F5-4 E5-4 E5-4 D5-4 D5-2
+
+# 突然停顿
+R-2 R-2 R-2 R-2
+R-4 R-4
+
+# ========== 第四乐章：余韵 (第37-48小节) ==========
+# 逐渐回归平静
+
+@bpm 124                   # 减速
+@noise_volume 0.3          
+@note_volume 0.5           
+
+# 沉思段落
+@sine
+C5-8 R-4 G4-8 R-4
+E4-8 R-4 C4-8 R-4
+@triangle
+F5-8 R-4 C5-8 R-4
+A4-8 R-4 F4-8 R-4
+
+# 回顾主题
+@waveform sine
+C4-4 E4-4 G4-4 C5-4
+C5-8 G4-8 E4-8 C4-8
+@triangle
+F4-4 A4-4 C5-4 F5-4
+F5-8 C5-8 A4-8 F4-8
+
+# 渐慢回归
+C5-8 R-4 G4-8 R-4
+E4-8 R-4 C4-8 R-4
+C4-4 R-2 C4-8 R-4
+C4-4 R-4 R-4
+
+# 终章 - 宁静的结束
+@sine
+C4-8 E4-8 G4-8 C5-8
+C5-16 R-16
+C4-8 R-4 C4-16
+R-8 R-16
+
+# 最后的回响
+C4-8 R-8 R-16
+R-4 R-4 R-4 R-4
